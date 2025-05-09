@@ -1,158 +1,180 @@
-# app.py
-from flask import Flask, render_template_string, request, jsonify
+import streamlit as st
+import pandas as pd
+import numpy as np
+import joblib
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-app = Flask(__name__)
+# Load trained model and scaler
+model = joblib.load("CKD_Model.pkl")
+scaler = joblib.load("CKD_Scaler.pkl")
 
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CKD Prediction System</title>
-    <style>
-        :root {
-            --primary-color: #1a6fc9;
-            --primary-dark: #145da0;
-            --secondary-color: #27ae60;
-            --warning-color: #f39c12;
-            --danger-color: #e74c3c;
-            --light-gray: #f5f9fc;
-            --medium-gray: #e0e6ed;
-            --dark-gray: #95a5a6;
-            --white: #ffffff;
-            --text-color: #333333;
-            --text-light: #666666;
-            --security-color: #8e44ad;
-        }
+st.set_page_config(page_title="CKD Risk Predictor Chatbot", layout="centered")
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: var(--text-color);
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: var(--light-gray);
-        }
+# Custom CSS for chat interface
+st.markdown("""
+<style>
+    .bot-message {
+        padding: 12px;
+        background: #f0f2f6;
+        border-radius: 15px;
+        margin: 5px 0;
+        max-width: 80%;
+        width: fit-content;
+    }
+    .user-message {
+        padding: 12px;
+        background: #007bff;
+        color: white;
+        border-radius: 15px;
+        margin: 5px 0;
+        max-width: 80%;
+        width: fit-content;
+        margin-left: auto;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-        /* Chatbot Styles */
-        #chatbot-container {
-            position: fixed;
-            bottom: 25px;
-            right: 25px;
-            z-index: 1000;
-        }
-        
-        #chatbot-iframe {
-            width: 380px;
-            height: 550px;
-            border: none;
-            border-radius: 12px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
-            display: none;
-        }
-        
-        #chatbot-toggle {
-            background-color: var(--primary-color);
-            color: var(--white);
-            border: none;
-            padding: 12px;
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
-            cursor: pointer;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-        }
+# Initialize session state
+if 'conversation' not in st.session_state:
+    st.session_state.conversation = []
+if 'current_question' not in st.session_state:
+    st.session_state.current_question = 0
+if 'user_responses' not in st.session_state:
+    st.session_state.user_responses = {}
 
-        .chatbot-visible #chatbot-iframe {
-            display: block;
-            animation: fadeIn 0.3s ease-out;
-        }
-    </style>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
-</head>
-<body>
-    <header>
-        <h1>Chronic Kidney Disease Prediction Tool <span class="security-badge">Secure</span></h1>
-    </header>
+# Define questions with validation rules
+questions = [
+    {
+        "key": "age",
+        "text": "First, may I know your age?",
+        "type": "number",
+        "min": 1,
+        "max": 120
+    },
+    {
+        "key": "bp",
+        "text": "What is your blood pressure reading (in mm Hg)? Normal range is typically between 90/60 and 120/80.",
+        "type": "number",
+        "min": 50,
+        "max": 200
+    },
+    # Add all other questions with similar structure
+    # ...
+    {
+        "key": "ane",
+        "text": "Finally, have you been diagnosed with anemia? (Yes/No)",
+        "type": "boolean"
+    }
+]
 
-    <nav class="nav-container">
-        <button class="nav-btn active" data-section="assessment">Assessment</button>
-        <button class="nav-btn" data-section="ml-features">ML Features</button>
-        <button class="nav-btn" data-section="dashboard">Dashboard</button>
-        <button class="nav-btn" data-section="tracker">Tracker</button>
-        <button class="nav-btn" data-section="recommendations">Recommendations</button>
-    </nav>
+# Display conversation history
+for msg in st.session_state.conversation:
+    if msg['role'] == 'bot':
+        st.markdown(f'<div class="bot-message">🤖 {msg["content"]}</div>', unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div class="user-message">👤 {msg["content"]}</div>', unsafe_allow_html=True)
 
-    <section id="assessment" class="content-section active-section">
-        <!-- Your assessment form here -->
-    </section>
+# Chat logic
+if st.session_state.current_question < len(questions):
+    current_q = questions[st.session_state.current_question]
+    
+    # Show current question if not already asked
+    if not any(msg['key'] == current_q['key'] for msg in st.session_state.conversation):
+        st.session_state.conversation.append({
+            'role': 'bot',
+            'content': current_q['text'],
+            'key': current_q['key']
+        })
+        st.experimental_rerun()
 
-    <div id="chatbot-container">
-        <iframe id="chatbot-iframe" src="https://agent.jotform.com/0195bf7a139274149d20a98efdf483b08976"></iframe>
-        <button id="chatbot-toggle">💬</button>
-    </div>
-
-    <script>
-        // Navigation
-        document.querySelectorAll('.nav-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.content-section').forEach(section => {
-                    section.classList.remove('active-section');
-                });
-                document.getElementById(btn.dataset.section).classList.add('active-section');
-            });
-        });
-
-        // Chatbot Toggle
-        document.getElementById('chatbot-toggle').addEventListener('click', () => {
-            document.getElementById('chatbot-container').classList.toggle('chatbot-visible');
-        });
-
-        async function calculateRisk() {
-            const formData = {
-                age: document.getElementById('age').value,
-                // Add other form fields
-            };
+    # Get user input
+    user_input = st.chat_input("Type your answer here...")
+    
+    if user_input:
+        try:
+            # Validate input
+            if current_q['type'] == 'number':
+                value = float(user_input)
+                if 'min' in current_q and value < current_q['min']:
+                    raise ValueError(f"Value should be at least {current_q['min']}")
+                if 'max' in current_q and value > current_q['max']:
+                    raise ValueError(f"Value should be at most {current_q['max']}")
+            elif current_q['type'] == 'boolean':
+                value = 1 if user_input.lower() in ['yes', 'y', 'true'] else 0
             
-            try {
-                const response = await fetch('/predict', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(formData)
-                });
-                const data = await response.json();
-                console.log('Risk result:', data);
-            } catch (error) {
-                console.error('Error:', error);
-            }
-        }
-    </script>
-</body>
-</html>
-"""
-
-@app.route('/')
-def home():
-    return render_template_string(HTML_TEMPLATE)
-
-@app.route('/predict', methods=['POST'])
-def predict():
-    data = request.json
-    risk_score = calculate_risk_score(data)
-    return jsonify({
-        'risk_score': risk_score,
-        'risk_level': 'high' if risk_score > 15 else 'medium'
+            # Store valid response
+            st.session_state.user_responses[current_q['key']] = value
+            st.session_state.conversation.append({
+                'role': 'user',
+                'content': user_input,
+                'key': current_q['key']
+            })
+            st.session_state.current_question += 1
+            st.experimental_rerun()
+            
+        except ValueError as e:
+            error_msg = f"Please enter a valid {current_q['type']}: {str(e)}"
+            st.session_state.conversation.append({
+                'role': 'bot',
+                'content': f"❌ {error_msg}"
+            })
+            st.experimental_rerun()
+else:
+    # Show analysis and results
+    st.session_state.conversation.append({
+        'role': 'bot',
+        'content': "🔍 Analyzing your responses..."
     })
+    st.experimental_rerun()
 
-def calculate_risk_score(data):
-    # Replace with actual ML model
-    return 18  # Example value
+    # Prepare data and make prediction
+    input_df = pd.DataFrame([st.session_state.user_responses])
+    scaled_data = scaler.transform(input_df)
+    prediction = model.predict(scaled_data)[0]
+    probability = model.predict_proba(scaled_data)[0][1]
+    
+    # Display results in chat format
+    result_text = "High Risk of CKD ⚠️" if prediction == 1 else "Low Risk of CKD ✅"
+    st.session_state.conversation.append({
+        'role': 'bot',
+        'content': f"""**Prediction Result**: {result_text}
+        
+        - Risk Probability: {probability*100:.1f}%
+        - Key Factors: {', '.join(list(input_df.columns)[:3])}
+        """
+    })
+    
+    # Visualizations
+    with st.expander("Detailed Analysis"):
+        col1, col2 = st.columns(2)
+        with col1:
+            # Pie chart
+            fig = plt.figure()
+            plt.pie([probability, 1-probability], 
+                    labels=['CKD Risk', 'No Risk'],
+                    colors=['#ff6384', '#36a2eb'],
+                    autopct='%1.1f%%')
+            st.pyplot(fig)
+        
+        with col2:
+            # Feature importance
+            feature_importance = pd.Series(np.abs(scaled_data[0]), 
+                                         index=input_df.columns).nlargest(5)
+            st.bar_chart(feature_importance)
+    
+    # Add restart option
+    st.session_state.conversation.append({
+        'role': 'bot',
+        'content': "Would you like to start over? (Yes/No)"
+    })
+    st.experimental_rerun()
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000)
+# Handle restart
+if st.session_state.current_question >= len(questions):
+    user_input = st.chat_input("Type 'Yes' to restart...")
+    if user_input and user_input.lower() in ['yes', 'y']:
+        st.session_state.conversation = []
+        st.session_state.current_question = 0
+        st.session_state.user_responses = {}
+        st.experimental_rerun()
