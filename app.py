@@ -1,4 +1,3 @@
-
 # app.py
 from flask import Flask, render_template_string, request, jsonify
 
@@ -36,9 +35,6 @@ HTML_TEMPLATE = """
             padding: 20px;
             background-color: var(--light-gray);
         }
-
-        /* Add all your original CSS styles here */
-        /* [PASTE YOUR COMPLETE CSS HERE] */
 
         /* Chatbot Styles */
         #chatbot-container {
@@ -93,19 +89,10 @@ HTML_TEMPLATE = """
         <button class="nav-btn" data-section="recommendations">Recommendations</button>
     </nav>
 
-    <!-- Assessment Section -->
     <section id="assessment" class="content-section active-section">
-        <!-- [PASTE YOUR ORIGINAL ASSESSMENT FORM HTML HERE] -->
+        <!-- Your assessment form here -->
     </section>
 
-    <!-- Other Sections -->
-    <section id="ml-features" class="content-section">
-        <!-- ML Features Content -->
-    </section>
-
-    <!-- [ADD OTHER SECTIONS HERE] -->
-
-    <!-- Chatbot -->
     <div id="chatbot-container">
         <iframe id="chatbot-iframe" src="https://agent.jotform.com/0195bf7a139274149d20a98efdf483b08976"></iframe>
         <button id="chatbot-toggle">💬</button>
@@ -127,13 +114,10 @@ HTML_TEMPLATE = """
             document.getElementById('chatbot-container').classList.toggle('chatbot-visible');
         });
 
-        // [PASTE YOUR ORIGINAL JAVASCRIPT CODE HERE]
-        
-        // AJAX Example
         async function calculateRisk() {
             const formData = {
                 age: document.getElementById('age').value,
-                // Collect all form data
+                // Add other form fields
             };
             
             try {
@@ -143,7 +127,7 @@ HTML_TEMPLATE = """
                     body: JSON.stringify(formData)
                 });
                 const data = await response.json();
-                updateResults(data);
+                console.log('Risk result:', data);
             } catch (error) {
                 console.error('Error:', error);
             }
@@ -160,16 +144,15 @@ def home():
 @app.route('/predict', methods=['POST'])
 def predict():
     data = request.json
-    # Add your ML model prediction logic here
-    risk_score = calculate_risk_score(data)  # Implement this
+    risk_score = calculate_risk_score(data)
     return jsonify({
         'risk_score': risk_score,
         'risk_level': 'high' if risk_score > 15 else 'medium'
     })
 
 def calculate_risk_score(data):
-    # Implement your actual ML model here
+    # Replace with actual ML model
     return 18  # Example value
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=8000)
